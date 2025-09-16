@@ -137,3 +137,6 @@ temp/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Exclude old template directory
+template-2/
