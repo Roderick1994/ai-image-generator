@@ -185,7 +185,7 @@ export async function generateImageWithDoubao(
     // 豆包图像生成API直接返回标准格式
     const standardResponse: ImageGenerationResponse = {
       id: doubaoResponse.id,
-      object: doubaoResponse.object || 'list',
+      object: 'list' as const,
       created: doubaoResponse.created,
       data: doubaoResponse.data || []
     };

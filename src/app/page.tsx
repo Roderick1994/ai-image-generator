@@ -424,7 +424,7 @@ export default function Home() {
                                 Rate Limit Exceeded
                               </h3>
                               <p className="text-sm text-yellow-700 mt-1">
-                                You've made too many requests. Please wait a moment before trying again.
+                                You&apos;ve made too many requests. Please wait a moment before trying again.
                               </p>
                             </div>
                           </div>
@@ -452,7 +452,7 @@ export default function Home() {
                                 </ul>
                                 <p className="mt-3">💡 <strong>建议解决方案：</strong></p>
                                 <ul className="list-disc list-inside ml-4 space-y-1">
-                                  <li>检查端点ID是否以"ep-"开头且格式正确</li>
+                                  <li>检查端点ID是否以&quot;ep-&quot;开头且格式正确</li>
                                   <li>确认端点在火山方舟控制台中存在且运行中</li>
                                   <li>稍后重试或联系技术支持</li>
                                 </ul>
