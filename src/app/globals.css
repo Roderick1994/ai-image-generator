@@ -31,3 +31,19 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Radix UI Select Portal z-index fix */
+[data-radix-popper-content-wrapper] {
+  z-index: 2147483647 !important;
+}
+
+/* Ensure all Radix Select content has proper z-index */
+[data-radix-select-content] {
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+/* Additional safety for any portal content */
+[data-radix-portal] {
+  z-index: 2147483647 !important;
+}
