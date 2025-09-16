@@ -20,21 +20,50 @@ let healthCache: HealthStatus | null = null;
 let lastHealthCheck = 0;
 const HEALTH_CHECK_INTERVAL = 30000; // 30秒缓存
 
-// 验证API密钥
-function validateApiToken(): { isValid: boolean; error?: string } {
-  const token = process.env.DOUBAO_API_KEY;
+// 验证API配置
+function validateApiConfig(): { isValid: boolean; error?: string } {
+  const apiKey = process.env.DOUBAO_API_KEY;
+  const endpointId = process.env.DOUBAO_ENDPOINT_ID;
   
-  if (!token) {
+  if (!apiKey) {
     return {
       isValid: false,
       error: 'DOUBAO API key is not configured'
     };
   }
   
-  if (token === 'your_doubao_api_key_here' || token.includes('your_') || token.includes('_here')) {
+  if (!endpointId) {
+    return {
+      isValid: false,
+      error: 'DOUBAO ENDPOINT ID is not configured'
+    };
+  }
+  
+  if (apiKey === 'your_doubao_api_key_here' || apiKey.includes('your_') || apiKey.includes('_here')) {
     return {
       isValid: false,
       error: 'DOUBAO API key is still set to placeholder value'
+    };
+  }
+  
+  if (endpointId === 'your_doubao_endpoint_id_here' || endpointId.includes('your_') || endpointId.includes('_here')) {
+    return {
+      isValid: false,
+      error: 'DOUBAO ENDPOINT ID is still set to placeholder value'
+    };
+  }
+  
+  if (!endpointId.startsWith('ep-')) {
+    return {
+      isValid: false,
+      error: 'DOUBAO ENDPOINT ID should start with "ep-"'
+    };
+  }
+  
+  if (apiKey === endpointId) {
+    return {
+      isValid: false,
+      error: 'DOUBAO API key and ENDPOINT ID should be different values'
     };
   }
   
@@ -50,22 +79,40 @@ async function checkDoubaoHealth(): Promise<{
   const startTime = Date.now();
   
   try {
-    // 验证API密钥
-    const tokenValidation = validateApiToken();
-    if (!tokenValidation.isValid) {
+    // 验证API配置
+    const configValidation = validateApiConfig();
+    if (!configValidation.isValid) {
       return {
         status: 'down',
-        error: tokenValidation.error
+        error: configValidation.error
       };
     }
 
-    // 发送简单的健康检查请求
-    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/models', {
-      method: 'GET',
+    // 发送简单的健康检查请求 - 使用图像生成端点进行测试
+    const endpointId = process.env.DOUBAO_ENDPOINT_ID;
+    if (!endpointId) {
+      return {
+        status: 'down',
+        error: 'DOUBAO_ENDPOINT_ID is not configured'
+      };
+    }
+
+    // 使用一个简单的图像生成请求来测试API连接
+    const testRequest = {
+      model: endpointId,
+      prompt: 'test',
+      size: '512x512',
+      n: 1,
+      response_format: 'url'
+    };
+
+    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.DOUBAO_API_KEY}`,
         'Content-Type': 'application/json'
       },
+      body: JSON.stringify(testRequest),
       signal: AbortSignal.timeout(10000) // 10秒超时
     });
 

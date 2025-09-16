@@ -2,14 +2,18 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Sparkles, ImageIcon, History, Download, RefreshCw } from 'lucide-react';
+import { Sparkles, ImageIcon, History, Download, RefreshCw, Cloud, HardDrive, CheckCircle, AlertCircle } from 'lucide-react';
 import { ImageGenerationForm } from '@/components/ImageGenerationForm';
 import { ImageDisplay } from '@/components/ImageDisplay';
 import { ImageGallery } from '@/components/ImageGallery';
 import { ImageModal } from '@/components/ImageModal';
 import { LoadingIndicator } from '@/components/LoadingIndicator';
 import { SetupInstructions } from '@/components/SetupInstructions';
+import { StorageStatus } from '@/components/StorageStatus';
 import { imageStorage } from '@/utils/image-storage';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { SupabaseTest } from '@/utils/supabase-test';
+import { initializeSupabaseDatabase } from '@/lib/supabase-init';
 import type { GeneratedImage, ImageGenerationRequest, ImageGenerationFormData, GenerationStatus } from '@/types/image-generation';
 
 type ActiveTab = 'generate' | 'display' | 'gallery';
@@ -33,6 +37,51 @@ export default function Home() {
   const [isClient, setIsClient] = useState(false);
   const [imageCount, setImageCount] = useState(0);
   const [storageInfo, setStorageInfo] = useState({ total: '0MB' });
+  const [storageStatus, setStorageStatus] = useState<{
+    type: 'cloud' | 'local';
+    configured: boolean;
+    connected: boolean;
+    message: string;
+  }>({ type: 'local', configured: false, connected: false, message: 'Checking storage...' });
+  const [galleryImages, setGalleryImages] = useState<GeneratedImage[]>([]);
+  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
+
+  // Check storage status
+  const checkStorageStatus = async () => {
+    const configured = isSupabaseConfigured();
+    
+    if (!configured) {
+      setStorageStatus({
+        type: 'local',
+        configured: false,
+        connected: false,
+        message: 'Using local storage (browser only)'
+      });
+      return;
+    }
+
+    // Test Supabase connection
+    const connectionTest = await SupabaseTest.testConnection();
+    
+    setStorageStatus({
+      type: connectionTest.success ? 'cloud' : 'local',
+      configured: true,
+      connected: connectionTest.success,
+      message: connectionTest.message
+    });
+
+    if (connectionTest.success) {
+      toast.success('Cloud Storage Connected', {
+        description: 'Your images will be saved to Supabase cloud storage',
+        duration: 3000
+      });
+    } else {
+      toast.warning('Cloud Storage Failed', {
+        description: 'Falling back to local storage. ' + connectionTest.message,
+        duration: 5000
+      });
+    }
+  };
 
   // Check account status
   const checkAccountStatus = async () => {
@@ -76,17 +125,45 @@ export default function Home() {
     };
   }, [isGenerating]);
 
+  // Load gallery images
+  const loadGalleryImages = async () => {
+    setIsLoadingGallery(true);
+    try {
+      const images = await imageStorage.loadImages();
+      setGalleryImages(images);
+      setImageCount(images.length);
+      setStorageInfo({ total: `${Math.round(images.length * 2.5)}MB` });
+    } catch (error) {
+      console.error('Failed to load gallery images:', error);
+      setGalleryImages([]);
+    } finally {
+      setIsLoadingGallery(false);
+    }
+  };
+
   // Initialize client-side data to prevent hydration errors
   useEffect(() => {
     setIsClient(true);
-    const count = imageStorage.getAll().length;
-    setImageCount(count);
-    setStorageInfo({ total: `${Math.round(count * 2.5)}MB` });
-  }, []);
-
-  // Check account status on component mount
-  useEffect(() => {
+    
+    // Initialize Supabase database if configured
+    const initializeDatabase = async () => {
+      if (isSupabaseConfigured()) {
+        try {
+          console.log('🔄 Initializing Supabase database...');
+          await initializeSupabaseDatabase();
+          console.log('✅ Supabase database initialized successfully');
+        } catch (error) {
+          console.warn('⚠️ Supabase database initialization failed:', error);
+          // Don't show error to user as this is optional
+        }
+      }
+    };
+    
+    // Check storage and account status
+    initializeDatabase();
+    checkStorageStatus();
     checkAccountStatus();
+    loadGalleryImages();
   }, []);
 
   // Handle image generation
@@ -155,9 +232,18 @@ export default function Home() {
 
       // Handle synchronous response from Doubao API
       if (result.success && result.imageUrl) {
+        // Generate UUID for the image
+        const generateUUID = () => {
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0;
+            const v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+          });
+        };
+
         // Create the generated image object
         const generatedImage: GeneratedImage = {
-          id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          id: generateUUID(),
           url: result.imageUrl,
           prompt: formData.prompt,
           negative_prompt: formData.negative_prompt,
@@ -171,20 +257,25 @@ export default function Home() {
           created_at: new Date().toISOString(),
         };
 
-        // Update image count and storage info
-        const newCount = imageStorage.getAll().length + 1;
-        setImageCount(newCount);
-        setStorageInfo({ total: `${Math.round(newCount * 2.5)}MB` });
-
-        // Save to storage
-        imageStorage.add(generatedImage);
-
-        // Update state
+        // Update state first
         setCurrentImage(generatedImage);
         setGenerationStatus({ status: 'succeeded', progress: 100 });
         setActiveTab('display');
         
-        toast.success('Image generated successfully!');
+        // Save to storage with error handling
+        try {
+          await imageStorage.saveImage(generatedImage);
+          console.log('✅ Image saved to storage successfully');
+          toast.success('Image generated and saved successfully! Check the Gallery tab to view it.');
+        } catch (saveError) {
+          console.error('❌ Failed to save image to storage:', saveError);
+          toast.error('Image generated but failed to save to gallery. You can still download it from here.');
+          // Don't throw error here - image generation was successful
+          // User can still see and download the image
+        }
+
+        // Update gallery images
+        await loadGalleryImages();
       } else {
         throw new Error('Failed to generate image: No image URL returned');
       }
@@ -212,15 +303,12 @@ export default function Home() {
 
 
   // Handle image deletion
-  const handleImageDelete = useCallback((imageId: string) => {
-    imageStorage.delete(imageId);
+  const handleImageDelete = useCallback(async (imageId: string) => {
+    await imageStorage.deleteImage(imageId);
     toast.success('Image deleted successfully');
-    setGalleryKey(prev => prev + 1);
     
-    // Update image count and storage info
-    const newCount = imageStorage.getAll().length;
-    setImageCount(newCount);
-    setStorageInfo({ total: `${Math.round(newCount * 2.5)}MB` });
+    // Update gallery images
+    await loadGalleryImages();
     
     // Clear current image if it was deleted
     if (currentImage?.id === imageId) {
@@ -265,6 +353,28 @@ export default function Home() {
                   {accountStatus.hasAccess ? 'Account Active' : 'Payment Required'}
                 </div>
               )}
+              
+              {/* Storage Status */}
+              {isClient && (
+                <div className={`hidden sm:flex items-center px-2 py-1 rounded-md text-sm ${
+                  storageStatus.type === 'cloud' && storageStatus.connected
+                    ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                    : storageStatus.configured && !storageStatus.connected
+                    ? 'bg-yellow-50 border border-yellow-200 text-yellow-700'
+                    : 'bg-gray-50 border border-gray-200 text-gray-700'
+                }`} title={storageStatus.message}>
+                  {storageStatus.type === 'cloud' ? (
+                    storageStatus.connected ? (
+                      <><Cloud className="h-3 w-3 mr-1" />Cloud</>
+                    ) : (
+                      <><AlertCircle className="h-3 w-3 mr-1" />Cloud Error</>
+                    )
+                  ) : (
+                    <><HardDrive className="h-3 w-3 mr-1" />Local</>
+                  )}
+                </div>
+              )}
+              
               {isClient && (
                 <>
                   <div className="hidden sm:flex items-center px-2 py-1 border border-gray-300 rounded-md text-sm">
@@ -322,6 +432,11 @@ export default function Home() {
 
           {activeTab === 'generate' && (
             <div className="space-y-6">
+              {/* Storage Status */}
+              {isClient && (
+                <StorageStatus status={storageStatus} />
+              )}
+              
               <div className="bg-white rounded-lg border shadow-sm">
                 <div className="p-6 border-b">
                   <h3 className="flex items-center space-x-2 text-lg font-semibold">
@@ -569,29 +684,36 @@ export default function Home() {
                     </div>
                     <button
                       className="px-3 py-1 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-md flex items-center space-x-2 transition-colors text-sm"
-                      onClick={() => setGalleryKey(prev => prev + 1)}
+                      onClick={loadGalleryImages}
+                      disabled={isLoadingGallery}
                     >
-                      <RefreshCw className="h-4 w-4" />
+                      <RefreshCw className={`h-4 w-4 ${isLoadingGallery ? 'animate-spin' : ''}`} />
                       <span>Refresh</span>
                     </button>
                   </div>
                 </div>
                 <div className="p-6">
-                  <ImageGallery
-                    key={galleryKey}
-                    images={imageStorage.getAll()}
-                    onImageClick={handleImageClick}
-                    onDownload={async (image) => {
-                      // Handle download functionality
-                      const link = document.createElement('a');
-                      link.href = image.url;
-                      link.download = `ai-generated-${image.id}.png`;
-                      document.body.appendChild(link);
-                      link.click();
-                      document.body.removeChild(link);
-                    }}
-                    onDelete={handleImageDelete}
-                  />
+                  {isLoadingGallery ? (
+                    <div className="flex items-center justify-center py-8">
+                      <RefreshCw className="h-6 w-6 animate-spin text-gray-400 mr-2" />
+                      <span className="text-gray-500">Loading images...</span>
+                    </div>
+                  ) : (
+                    <ImageGallery
+                      images={galleryImages}
+                      onImageClick={handleImageClick}
+                      onDownload={async (image) => {
+                        // Handle download functionality
+                        const link = document.createElement('a');
+                        link.href = image.url;
+                        link.download = `ai-generated-${image.id}.png`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      onDelete={handleImageDelete}
+                    />
+                  )}
                 </div>
               </div>
             </div>

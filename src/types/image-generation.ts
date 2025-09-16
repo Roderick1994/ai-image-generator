@@ -53,6 +53,15 @@ export interface GeneratedImage {
   model_version: string;
   created_at: string;
   generation_time?: number;
+  tags?: string[];
+  is_favorite?: boolean;
+  quality?: string;
+  size?: string;
+  // Legacy properties for backward compatibility
+  isFavorite?: boolean;
+  createdAt?: string;
+  model?: string;
+  imageUrl?: string;
 }
 
 export interface ImageGenerationFormData {

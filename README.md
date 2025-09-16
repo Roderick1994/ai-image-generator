@@ -1,11 +1,13 @@
-# Ansh & Riley Full-Stack Template
+# AI Image Generator
 
-This is a full-stack template project for Software Composers to create  applications with AI.
+This is an AI-powered image generation application that supports multiple AI providers including DOUBAO, OpenAI, and Replicate.
 
 ## Getting started
-To create a new project, you go to `/paths`, choose from our list of Paths, and then use Cursor's Composer feature to quickly scaffold your project!
-
-You can also edit the Path's prompt template to be whatever you like!
+To get started with this AI image generator:
+1. Copy `.env.local.example` to `.env.local`
+2. Configure your API keys (DOUBAO_API_KEY, DOUBAO_ENDPOINT_ID)
+3. Run `npm install` and `npm run dev`
+4. Start generating amazing images with AI!
 
 ## Technologies used
 This doesn't really matter, but is useful for the AI to understand more about this project. We are using the following technologies

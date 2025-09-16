@@ -1,11 +1,21 @@
 import { GeneratedImage, LocalStorageImageData, STORAGE_KEYS } from '@/types/image-generation';
+import { SupabaseImageStorage } from '@/services/supabase-storage';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 export class ImageStorage {
   private static instance: ImageStorage;
-  private images: GeneratedImage[] = [];
+  private supabaseStorage: SupabaseImageStorage;
+  private useSupabase: boolean;
+  private localImages: GeneratedImage[] = [];
 
   private constructor() {
-    this.loadFromStorage();
+    this.supabaseStorage = new SupabaseImageStorage();
+    this.useSupabase = isSupabaseConfigured();
+    
+    if (!this.useSupabase) {
+      console.warn('Supabase not configured, falling back to local storage');
+      this.loadFromLocalStorage();
+    }
   }
 
   public static getInstance(): ImageStorage {
@@ -15,87 +25,158 @@ export class ImageStorage {
     return ImageStorage.instance;
   }
 
-  private loadFromStorage(): void {
-    if (typeof window === 'undefined') return;
-    
+  // Check if Supabase is available
+  public isAvailable(): boolean {
+    return this.supabaseStorage.isAvailable();
+  }
+
+  // Load from localStorage (fallback)
+  private loadFromLocalStorage(): void {
     try {
-      const stored = localStorage.getItem(STORAGE_KEYS.GENERATED_IMAGES);
+      const stored = localStorage.getItem('generatedImages')
       if (stored) {
-        const parsedData = JSON.parse(stored);
-        
-        // Data migration: handle both old format (array) and new format (object)
-        if (Array.isArray(parsedData)) {
-          // Old format: direct array of images
-          console.log('Migrating old format image data to new format');
-          this.images = parsedData;
-          // Save in new format
-          this.saveToStorage();
-        } else if (parsedData && typeof parsedData === 'object' && 'images' in parsedData) {
-          // New format: object with images and lastUpdated
-          const data: LocalStorageImageData = parsedData;
-          this.images = data.images || [];
-        } else {
-          // Invalid format
-          console.warn('Invalid image storage format, resetting to empty array');
-          this.images = [];
-        }
+        const parsed = JSON.parse(stored)
+        this.localImages = Array.isArray(parsed) ? parsed : []
       }
     } catch (error) {
-      console.error('Error loading images from storage:', error);
-      this.images = [];
+      console.error('Error loading from localStorage:', error)
+      this.localImages = []
     }
   }
 
-  private saveToStorage(): void {
-    if (typeof window === 'undefined') return;
-    
+  // Save to localStorage (fallback)
+  private saveToLocalStorage(): void {
     try {
-      const data: LocalStorageImageData = {
-        images: this.images,
-        lastUpdated: new Date().toISOString(),
-      };
-      localStorage.setItem(STORAGE_KEYS.GENERATED_IMAGES, JSON.stringify(data));
+      localStorage.setItem('generatedImages', JSON.stringify(this.localImages))
     } catch (error) {
-      console.error('Error saving images to storage:', error);
+      console.error('Error saving to localStorage:', error)
     }
   }
 
+  // Load all images from Supabase
+  public async loadImages(): Promise<GeneratedImage[]> {
+    if (this.useSupabase) {
+      return await this.supabaseStorage.loadImages()
+    } else {
+      return this.localImages
+    }
+  }
+
+  // Save image
+  public async saveImage(image: GeneratedImage): Promise<void> {
+    if (this.useSupabase) {
+      await this.supabaseStorage.saveImage(image);
+    } else {
+      const existingIndex = this.localImages.findIndex(img => img.id === image.id);
+      if (existingIndex >= 0) {
+        this.localImages[existingIndex] = image;
+      } else {
+        this.localImages.unshift(image);
+      }
+      this.saveToLocalStorage();
+    }
+  }
+
+  // Delete image
+  public async deleteImage(id: string): Promise<void> {
+    if (this.useSupabase) {
+      await this.supabaseStorage.deleteImage(id);
+    } else {
+      this.localImages = this.localImages.filter(img => img.id !== id);
+      this.saveToLocalStorage();
+    }
+  }
+
+  // Update image
+  public async updateImage(image: GeneratedImage): Promise<void> {
+    if (this.useSupabase) {
+      await this.supabaseStorage.updateImage(image);
+    } else {
+      const index = this.localImages.findIndex(img => img.id === image.id);
+      if (index >= 0) {
+        this.localImages[index] = image;
+        this.saveToLocalStorage();
+      }
+    }
+  }
+
+  // Get paginated images
+  public async getImages(page: number = 1, pageSize: number = 12): Promise<{ images: GeneratedImage[], total: number }> {
+    if (this.useSupabase) {
+      return await this.supabaseStorage.getImages(page, pageSize);
+    } else {
+      const start = (page - 1) * pageSize;
+      const end = start + pageSize;
+      return {
+        images: this.localImages.slice(start, end),
+        total: this.localImages.length
+      };
+    }
+  }
+
+  // Search images
+  public async searchImages(query: string): Promise<GeneratedImage[]> {
+    if (this.useSupabase) {
+      return await this.supabaseStorage.searchImages(query);
+    } else {
+      const lowerQuery = query.toLowerCase();
+      return this.localImages.filter(img => 
+        img.prompt.toLowerCase().includes(lowerQuery) ||
+        img.tags?.some(tag => tag.toLowerCase().includes(lowerQuery))
+      );
+    }
+  }
+
+  // Get favorite images
+  public async getFavoriteImages(): Promise<GeneratedImage[]> {
+    if (this.useSupabase) {
+      return await this.supabaseStorage.getFavoriteImages();
+    } else {
+      return this.localImages.filter(img => img.isFavorite);
+    }
+  }
+
+  // Clear all images
+  public async clearAllImages(): Promise<void> {
+    if (this.useSupabase) {
+      await this.supabaseStorage.clearAllImages();
+    } else {
+      this.localImages = [];
+      this.saveToLocalStorage();
+    }
+  }
+
+  // Legacy synchronous methods for backward compatibility (deprecated)
   public add(image: GeneratedImage): void {
-    this.images.unshift(image); // Add to beginning for newest first
-    this.saveToStorage();
+    console.warn('add() method is deprecated. Use saveImage() instead.');
+    this.saveImage(image).catch(console.error);
   }
 
   public getAll(): GeneratedImage[] {
-    return [...this.images];
+    console.warn('getAll() method is deprecated. Use loadImages() instead.');
+    return [];
   }
 
   public getById(id: string): GeneratedImage | undefined {
-    return this.images.find(img => img.id === id);
+    console.warn('getById() method is deprecated. Use loadImages() and filter instead.');
+    return undefined;
   }
 
   public delete(id: string): boolean {
-    const index = this.images.findIndex(img => img.id === id);
-    if (index !== -1) {
-      this.images.splice(index, 1);
-      this.saveToStorage();
-      return true;
-    }
-    return false;
+    console.warn('delete() method is deprecated. Use deleteImage() instead.');
+    this.deleteImage(id).catch(console.error);
+    return true;
   }
 
   public deleteMultiple(ids: string[]): number {
-    let deletedCount = 0;
-    ids.forEach(id => {
-      if (this.delete(id)) {
-        deletedCount++;
-      }
-    });
-    return deletedCount;
+    console.warn('deleteMultiple() method is deprecated. Use deleteImage() for each id instead.');
+    ids.forEach(id => this.deleteImage(id).catch(console.error));
+    return ids.length;
   }
 
   public clear(): void {
-    this.images = [];
-    this.saveToStorage();
+    console.warn('clear() method is deprecated. Use clearAllImages() instead.');
+    this.clearAllImages().catch(console.error);
   }
 
   public getPaginated(page: number, itemsPerPage: number): {
@@ -103,43 +184,30 @@ export class ImageStorage {
     totalPages: number;
     totalItems: number;
   } {
-    const startIndex = (page - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const paginatedImages = this.images.slice(startIndex, endIndex);
-    
-    return {
-      images: paginatedImages,
-      totalPages: Math.ceil(this.images.length / itemsPerPage),
-      totalItems: this.images.length,
-    };
+    console.warn('getPaginated() method is deprecated. Use getImages() instead.');
+    return { images: [], totalPages: 0, totalItems: 0 };
   }
 
   public search(query: string): GeneratedImage[] {
-    const lowercaseQuery = query.toLowerCase();
-    return this.images.filter(img => 
-      img.prompt.toLowerCase().includes(lowercaseQuery) ||
-      (img.negative_prompt && img.negative_prompt.toLowerCase().includes(lowercaseQuery))
-    );
+    console.warn('search() method is deprecated. Use searchImages() instead.');
+    return [];
   }
 
   public getByDateRange(startDate: Date, endDate: Date): GeneratedImage[] {
-    return this.images.filter(img => {
-      const imgDate = new Date(img.created_at);
-      return imgDate >= startDate && imgDate <= endDate;
-    });
+    console.warn('getByDateRange() method is deprecated.');
+    return [];
   }
 
   public exportData(): LocalStorageImageData {
-    return {
-      images: this.images,
-      lastUpdated: new Date().toISOString(),
-    };
+    console.warn('exportData() method is deprecated.');
+    return { images: [], lastUpdated: new Date().toISOString() };
   }
 
   public importData(data: LocalStorageImageData): void {
-    this.images = data.images || [];
-    this.saveToStorage();
+    console.warn('importData() method is deprecated.');
   }
+
+
 }
 
 // Export singleton instance
