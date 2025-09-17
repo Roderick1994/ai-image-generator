@@ -64,7 +64,7 @@ export function ImageGenerationForm({ onSubmit, isGenerating }: ImageGenerationF
     }
     
     setIsAnySelectOpen(isOpen);
-  }, []);
+  }, [isAnySelectOpen]);
 
   // Monitor DOM changes and events to detect select state changes
   useEffect(() => {

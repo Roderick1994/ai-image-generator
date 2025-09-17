@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -150,10 +151,11 @@ export function ImageModal({
                   <div className="animate-pulse text-white">Loading full resolution...</div>
                 </div>
               )}
-              <img
+              <Image
                 src={image.url}
                 alt={image.prompt}
-                className={`w-full h-full object-contain transition-opacity duration-300 ${
+                fill
+                className={`object-contain transition-opacity duration-300 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
                 onLoad={() => setImageLoaded(true)}
@@ -161,6 +163,7 @@ export function ImageModal({
                   setImageLoaded(true);
                   toast.error('Failed to load full resolution image');
                 }}
+                unoptimized
               />
               
               {/* Close Button */}

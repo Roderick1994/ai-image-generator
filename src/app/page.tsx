@@ -14,6 +14,7 @@ import { imageStorage } from '@/utils/image-storage';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { SupabaseTest } from '@/utils/supabase-test';
 import { initializeSupabaseDatabase } from '@/lib/supabase-init';
+import { fixDatabaseSchema } from '@/utils/database-fixer';
 import type { GeneratedImage, ImageGenerationRequest, ImageGenerationFormData, GenerationStatus } from '@/types/image-generation';
 
 type ActiveTab = 'generate' | 'display' | 'gallery';
@@ -150,6 +151,13 @@ export default function Home() {
       if (isSupabaseConfigured()) {
         try {
           console.log('🔄 Initializing Supabase database...');
+          
+          // First, fix any database schema issues
+          console.log('🔧 Checking and fixing database schema...');
+          await fixDatabaseSchema();
+          console.log('✅ Database schema check completed');
+          
+          // Then initialize the database
           await initializeSupabaseDatabase();
           console.log('✅ Supabase database initialized successfully');
         } catch (error) {

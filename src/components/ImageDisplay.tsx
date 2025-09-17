@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,10 +99,11 @@ export function ImageDisplay({
               </div>
             </div>
           )}
-          <img
+          <Image
             src={image.url}
             alt={image.prompt}
-            className={`w-full h-full object-cover transition-opacity duration-300 ${
+            fill
+            className={`object-cover transition-opacity duration-300 ${
               imageLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             onLoad={() => setImageLoaded(true)}
@@ -109,6 +111,7 @@ export function ImageDisplay({
               setImageLoaded(true);
               toast.error('Failed to load image');
             }}
+            unoptimized
           />
           
           {/* Overlay Actions */}

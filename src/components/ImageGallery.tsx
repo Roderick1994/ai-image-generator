@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -324,11 +325,13 @@ export function ImageGallery({
                     <Card className="cursor-pointer hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex gap-4">
-                          <div className="w-24 h-24 flex-shrink-0">
-                            <img
+                          <div className="w-24 h-24 flex-shrink-0 relative">
+                            <Image
                               src={image.url}
                               alt={image.prompt}
-                              className="w-full h-full object-cover rounded"
+                              fill
+                              className="object-cover rounded"
+                              unoptimized
                             />
                           </div>
                           <div className="flex-1 min-w-0">

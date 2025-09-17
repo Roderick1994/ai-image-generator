@@ -17,19 +17,23 @@ export class SupabaseImageStorage {
       id: record.id,
       url: record.image_url,
       prompt: record.prompt,
-      width: record.width || 1024,
-      height: record.height || 1024,
-      model_version: record.model || 'unknown',
+      negative_prompt: record.negative_prompt,
+      width: record.width,
+      height: record.height,
+      num_inference_steps: record.steps,
+      guidance_scale: record.guidance_scale,
+      seed: record.seed,
+      scheduler: record.style,
+      model_version: record.model,
       created_at: record.created_at,
       quality: record.quality,
-      size: record.size,
       tags: record.tags || [],
-      is_favorite: record.is_favorite || false,
+      is_favorite: record.is_favorite,
       // Legacy properties for backward compatibility
       imageUrl: record.image_url,
       model: record.model,
       createdAt: record.created_at,
-      isFavorite: record.is_favorite || false
+      isFavorite: record.is_favorite
     }
   }
 
@@ -38,20 +42,19 @@ export class SupabaseImageStorage {
     return {
       id: image.id,
       prompt: image.prompt,
-      negative_prompt: image.negative_prompt || null,
+      negative_prompt: image.negative_prompt || undefined,
       image_url: image.url,
       file_path: `generated/${image.id}.png`,
-      width: image.width,
-      height: image.height,
-      quality: 'standard', // 使用默认质量
-      style: image.scheduler || 'natural', // 使用 scheduler 作为 style
-      tags: [], // 空标签数组
-      metadata: {
-        num_inference_steps: image.num_inference_steps || 20,
-        guidance_scale: image.guidance_scale || 7.5,
-        seed: image.seed || null,
-        model_version: image.model_version || 'doubao'
-      }, // 将额外参数存储在 metadata 中
+      width: image.width || 1024,
+      height: image.height || 1024,
+      steps: image.num_inference_steps || 20,
+      guidance_scale: image.guidance_scale || 7.5,
+      seed: image.seed || undefined,
+      model: image.model_version || 'doubao',
+      quality: 'standard',
+      style: image.scheduler || 'natural',
+      tags: [],
+      is_favorite: image.is_favorite || false,
       created_at: image.created_at
     }
   }
@@ -116,18 +119,18 @@ export class SupabaseImageStorage {
     }
 
     try {
-      // Get image record to find storage path
+      // Get image record to find file path
       const { data: imageRecord } = await supabase
         .from(TABLES.GENERATED_IMAGES)
-        .select('storage_path')
+        .select('file_path')
         .eq('id', id)
         .single()
 
-      // Delete from storage if storage path exists
-      if (imageRecord?.storage_path) {
+      // Delete from storage if file path exists
+      if (imageRecord?.file_path) {
         await supabase.storage
           .from(BUCKETS.IMAGES)
-          .remove([imageRecord.storage_path])
+          .remove([imageRecord.file_path])
       }
 
       // Delete from database
